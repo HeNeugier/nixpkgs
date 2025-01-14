@@ -222,6 +222,7 @@ let
         # See https://github.com/fish-shell/fish-shell/issues/8789
         rm tests/pexpects/exit_handlers.py
         rm tests/pexpects/private_mode.py
+        rm tests/pexpects/history.py
       ''
       + lib.optionalString stdenv.hostPlatform.isDarwin ''
         # Tests use pkill/pgrep which are currently not built on Darwin
