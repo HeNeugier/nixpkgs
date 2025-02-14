@@ -7,51 +7,64 @@
   libjaylink,
   libusb1,
   pciutils,
+  openssl,
+  sphinx,
+  meson,
+  ninja,
   pkg-config,
+  cmocka,
   jlinkSupport ? false,
 }:
 
 stdenv.mkDerivation rec {
   pname = "flashrom";
-  version = "1.3.0";
+  version = "1.5.1";
 
   src = fetchurl {
-    url = "https://download.flashrom.org/releases/flashrom-v${version}.tar.bz2";
-    hash = "sha256-oFMjRFPM0BLnnzRDvcxhYlz5e3/Xy0zdi/v/vosUliM=";
+    url = "https://download.flashrom.org/releases/flashrom-v${version}.tar.xz";
+    hash = "sha256-H5NLB27UnqziA2Vewkn8eGGmuOh/5K73MuR7bkhbYpM=";
   };
 
   nativeBuildInputs = [
+    meson
+    ninja
     pkg-config
     installShellFiles
+    sphinx
   ];
+
   buildInputs =
     [
       libftdi1
       libusb1
+      cmocka
+      openssl
     ]
     ++ lib.optionals (!stdenv.hostPlatform.isDarwin) [ pciutils ]
     ++ lib.optional jlinkSupport libjaylink;
 
+  mesonFlags = [
+    (lib.mesonOption "programmer" "auto")
+    (lib.mesonEnable "man-pages" true)
+    (lib.mesonEnable "tests" true)
+  ];
+
+  # TODO: after the meson build, the udev rules file is no longer present
+  # in the build dir, so we need to write it to /tmp to be able to still access
+  # it during the install phase.
+  # There might be a better way to do this...
   postPatch = ''
-    substituteInPlace util/flashrom_udev.rules \
-      --replace 'GROUP="plugdev"' 'TAG+="uaccess", TAG+="udev-acl"'
+    substitute util/flashrom_udev.rules /tmp/flashrom_udev.rules \
+      --replace-fail 'GROUP="plugdev"' 'TAG+="uaccess", TAG+="udev-acl"'
   '';
 
-  makeFlags =
-    [
-      "PREFIX=$(out)"
-      "libinstall"
-    ]
-    ++ lib.optional jlinkSupport "CONFIG_JLINK_SPI=yes"
-    ++ lib.optionals (stdenv.hostPlatform.isDarwin && stdenv.hostPlatform.isx86_64) [
-      "CONFIG_INTERNAL_X86=no"
-      "CONFIG_INTERNAL_DMI=no"
-      "CONFIG_RAYER_SPI=no"
-    ];
-
+  # TODO: see above
   postInstall = ''
-    install -Dm644 util/flashrom_udev.rules $out/lib/udev/rules.d/flashrom.rules
+    mkdir --parents $out/lib/udev/rules.d
+    mv /tmp/flashrom_udev.rules $out/lib/udev/rules.d/flashrom.rules
   '';
+
+  doCheck = true;
 
   NIX_CFLAGS_COMPILE = lib.optionalString (
     stdenv.cc.isClang && !stdenv.hostPlatform.isDarwin
